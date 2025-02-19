@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+
+	"github.com/hvossi92/gollama/src/services"
 )
 
 //go:embed templates
@@ -37,6 +39,10 @@ func main() {
 
 	// Serve embedded static files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
+
+	db := services.SetupDb()
+	defer db.Close()
+	services.CreateTestVectors()
 
 	fmt.Println("Server listening on port 2048")
 	err = http.ListenAndServe(":2048", nil)
