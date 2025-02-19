@@ -1,38 +1,58 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"html/template"
+	"io/fs"
+	"log"
 	"net/http"
-	"path/filepath"
 )
 
-func main() {
-	http.HandleFunc("/", handleChat)         // Handle GET requests for the index page at root "/"
-	http.HandleFunc("/chat", handlePostChat) // Handle POST requests to "/chat" for chat messages
+//go:embed templates
+var templatesFS embed.FS
 
-	fs := http.FileServer(http.Dir("./static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fs))
+//go:embed static
+var staticFS embed.FS
+
+// Store parsed templates globally
+var templates *template.Template
+
+func main() {
+	// Parse all templates at startup
+	var err error
+	templates, err = template.ParseFS(templatesFS, "templates/*.html")
+	if err != nil {
+		log.Fatalf("Failed to parse templates: %v", err)
+	}
+
+	// Create sub filesystem for static assets
+	staticSubFS, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		log.Fatal("Failed to create sub filesystem:", err)
+	}
+
+	http.HandleFunc("/", handleChat)
+	http.HandleFunc("POST /chat", handlePostChat)
+
+	// Serve embedded static files
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
 
 	fmt.Println("Server listening on port 2048")
-	err := http.ListenAndServe(":2048", nil)
+	err = http.ListenAndServe(":2048", nil)
 	if err != nil {
-		fmt.Println("Server failed to start:", err)
+		log.Fatalf("Server failed to start: %v", err)
 	}
 }
 
 func handleChat(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" { // Only handle requests exactly to "/" for index.html
+	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
-	fp := filepath.Join("src", "templates", "index.html")
-	tmpl, err := template.ParseFiles(fp)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error parsing template: %v", err), http.StatusInternalServerError)
-		return
-	}
-	err = tmpl.Execute(w, nil)
+
+	// Execute the pre-parsed template
+	err := templates.ExecuteTemplate(w, "index.html", nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error executing template: %v", err), http.StatusInternalServerError)
 	}
@@ -45,18 +65,18 @@ func handlePostChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	message := r.FormValue("message")
-
-	// Simulate AI response (replace with your actual logic)
+	// Simulate AI response
 	aiResponse := fmt.Sprintf("AI Response: You said: %s", message)
 
+	// You can also pre-parse this template in main() if it's static
 	tmpl, err := template.New("message").Parse(`
-		<div class="message user-message">
-			{{.UserMessage}}
-		</div>
-		<div class="message ai-message">
-			{{.AIResponse}}
-		</div>
-	`)
+    <div class="message user-message">
+        {{.UserMessage}}
+    </div>
+    <div class="message ai-message">
+        {{.AIResponse}}
+    </div>
+    `)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error parsing message template: %v", err), http.StatusInternalServerError)
 		return
