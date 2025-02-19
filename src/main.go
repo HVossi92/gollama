@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/hvossi92/gollama/src/llm"
 	"github.com/hvossi92/gollama/src/services"
 )
 
@@ -40,8 +41,7 @@ func main() {
 	// Serve embedded static files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
 
-	db := services.SetupDb()
-	defer db.Close()
+	services.SetupDb()
 	services.CreateTestVectors()
 
 	fmt.Println("Server listening on port 2048")
@@ -65,14 +65,12 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePostChat(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	message := r.FormValue("message")
+
+	fmt.Println("Asking LLM")
+	aiResponse := llm.AskLlm(message)
 	// Simulate AI response
-	aiResponse := fmt.Sprintf("AI Response: You said: %s", message)
+	fmt.Printf("AI Response: You said: %s", message)
 
 	// You can also pre-parse this template in main() if it's static
 	tmpl, err := template.New("message").Parse(`

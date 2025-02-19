@@ -13,6 +13,7 @@ build:
 
 # Clean the build directory
 clean:
+	@rm -rf ./db
 	@rm -rf $(BUILD_DIR)
 
 # Phony targets
