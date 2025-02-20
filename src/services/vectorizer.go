@@ -20,6 +20,7 @@ const embeddingModel = "nomic-embed-text"
 var collection *chromem.Collection
 
 func SetUpVectorDb(overwrite bool) {
+	ctx := context.Background()
 	// Now we use our vector database for retrieval augmented generation (RAG),
 	// which means we provide the LLM with relevant knowledge.
 	// Set up chromem-go with persistence, so that when the program restarts, the
@@ -50,7 +51,7 @@ func SetUpVectorDb(overwrite bool) {
 	if collection.Count() == 0 {
 		// Here we use a DBpedia sample, where each line contains the lead section/introduction
 		// to some Wikipedia article and its category.
-		f, err := os.Open("./dbpedia_sample.jsonl")
+		f, err := os.Open("./rag-data/dbpedia_sample.jsonl")
 		if err != nil {
 			panic(err)
 		}

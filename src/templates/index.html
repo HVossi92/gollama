@@ -12,16 +12,14 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 
     <style>
-        .my-indicator {
-            display: none;
-        }
-
-        .htmx-request .my-indicator {
-            display: inline;
-        }
-
-        .htmx-request.my-indicator {
-            display: inline;
+        /* Style for annotation area to ensure it's below chat and has some margin */
+        #image-annotation-area {
+            margin-top: 20px;
+            /* Add space above annotation area */
+            border-top: 1px solid #ddd;
+            /* Separator line */
+            padding-top: 20px;
+            /* Space inside annotation area */
         }
     </style>
 </head>
@@ -64,14 +62,28 @@
         <!-- Input Area -->
         <div class="input-area">
             <form hx-post="/chat" hx-target="#chat-messages" hx-swap="beforeend" hx-trigger="submit"
-                hx-indicator="#spinner" class="d-flex gap-2">
+                class="d-flex gap-2">
                 <textarea name="message" class="form-control" rows="3" placeholder="Type your message here..."
                     required></textarea>
                 <button type="submit" class="btn btn-primary send-button align-self-end px-4">
                     Send
-                    <span id="spinner" class="my-indicator">...</span>
                 </button>
             </form>
+        </div>
+
+        <!-- Image Annotation Area -->
+        <div id="image-annotation-area">
+            <form hx-post="/upload" hx-target="#image-display-area" hx-swap="innerHTML" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="image-upload" class="form-label">Upload Image for Annotation</label>
+                    <input class="form-control" type="file" name="image" id="image-upload" accept="image/*">
+                </div>
+                <button type="submit" class="btn btn-secondary">Upload Image</button>
+            </form>
+
+            <div id="image-display-area">
+                <p>Upload an image to begin annotation.</p>
+            </div>
         </div>
     </div>
 

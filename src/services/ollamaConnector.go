@@ -1,80 +1,128 @@
 package services
 
 import (
-	"context"
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"strings"
-	"text/template"
-
-	"github.com/sashabaranov/go-openai"
 )
 
-const (
-	// We use a local LLM running in Ollama to ask a question: https://github.com/ollama/ollama
-	ollamaBaseURL = "http://192.168.178.105:11434/v1"
-	// We use Google's Gemma (2B), a very small model that doesn't need many resources
-	// and is fast, but doesn't have much knowledge: https://huggingface.co/google/gemma-2b
-	// We found Gemma 2B to be superior to TinyLlama (1.1B), Stable LM 2 (1.6B)
-	// and Phi-2 (2.7B) for the retrieval augmented generation (RAG) use case.
-	// llmModel = "gemma:2b"
-	llmModel = "qwen2.5-coder:32b"
-)
+// ImageMetadata struct to hold canvas coordinates
+type ImageMetadata struct {
+	CanvasCoordinates []Point `json:"canvas_coordinates"`
+}
 
-// There are many different ways to provide the context to the LLM.
-// You can pass each context as user message, or the list as one user message,
-// or pass it in the system prompt. The system prompt itself also has a big impact
-// on how well the LLM handles the context, especially for LLMs with < 7B parameters.
-// The prompt engineering is up to you, it's out of scope for the vector database.
-var systemPromptTpl = template.Must(template.New("system_prompt").Parse(`
-You are a helpful assistant with access to a knowlege base, tasked with answering questions about general knowledge, but also specific to the provided knowledge base.
+// Point struct for x, y coordinates
+type Point struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
 
-Answer the question in a very concise manner. Use an unbiased and journalistic tone. Do not repeat text. Don't make anything up. If you are not sure about something, just say that you don't know.
-{{- /* Stop here if no context is provided. The rest below is for handling contexts. */ -}}
-{{- if . -}}
-If possible, answer the question solely based on the provided search results from the knowledge base. If the search results from the knowledge base are not relevant to the question at hand, try to answer the question based on general knowledge. But do not make anything up.
+// GenerateOptions struct to hold metadata within options
+type GenerateOptions struct {
+	Metadata ImageMetadata `json:"metadata,omitempty"` // Use omitempty if metadata is optional
+}
 
-Anything between the following 'context' XML blocks is retrieved from the knowledge base, not part of the conversation with the user. The bullet points are ordered by relevance, so the first one is the most relevant.
+// OllamaRequest struct to structure the request body
+type OllamaRequest struct {
+	Model   string                 `json:"model"`
+	Prompt  string                 `json:"prompt"`
+	Images  []string               `json:"images,omitempty"`  // Omitempty if no image
+	Options map[string]interface{} `json:"options,omitempty"` // Changed from string to map
+}
 
-<context>
-    {{- if . -}}
-    {{- range $context := .}}
-    - {{.}}{{end}}
-    {{- end}}
-</context>
-{{- end -}}
+var systemPrompt = `SYSTEM PROMPT: You are an expert at analyzing images and pictures. The user may send additional regions of interest in the form of coordinates, denoting user drawn boxes.
+These boxes are denoted as x and y coordinates as well as w (width) and h (height). If these coordinates are present, ONLY analyze the image in the specified region.
+If no boxes are present, analyze the entire image.
 
-Don't mention the knowledge base, context or search results in your answer.
-`))
+When answering, also mention the annotation data, if present.
 
-func askLLM(ctx context.Context, contexts []string, question string) string {
-	// We can use the OpenAI client because Ollama is compatible with OpenAI's API.
-	openAIClient := openai.NewClientWithConfig(openai.ClientConfig{
-		BaseURL:    ollamaBaseURL,
-		HTTPClient: http.DefaultClient,
-	})
-	sb := &strings.Builder{}
-	err := systemPromptTpl.Execute(sb, contexts)
+Annotation data will have the format of the following example:
+Annotation Data: [{"x":14,"y":59.21875,"w":261,"h":85}]
+
+USER QUESTION: `
+
+func SendImageToOllama(question string, imagePath string, annotationData string) string {
+	ollamaEndpoint := "http://192.168.178.105:11434/api/generate" // Replace with your Ollama endpoint
+	modelName := "llama3.2-vision"                                // Replace with your Ollama model name (or a model that handles images)
+
+	// 1. Load and Base64 Encode Image
+	base64Image, err := loadImageBase64(imagePath)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error loading and encoding image: %v", err)
+		return err.Error()
 	}
-	messages := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: sb.String(),
-		}, {
-			Role:    openai.ChatMessageRoleUser,
-			Content: "Question: " + question,
-		},
-	}
-	res, err := openAIClient.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model:    llmModel,
-		Messages: messages,
-	})
-	if err != nil {
-		panic(err)
-	}
-	reply := res.Choices[0].Message.Content
-	reply = strings.TrimSpace(reply)
 
-	return reply
+	fmt.Println("Annotation Data: " + annotationData)
+
+	// Then use this in your request
+	requestPayload := OllamaRequest{
+		Model:  modelName,
+		Prompt: question + " Annotation Data: " + string(json.RawMessage(annotationData)),
+		Images: []string{base64Image},
+	}
+
+	// 5. Marshal Request Payload to JSON
+	jsonPayload, err := json.Marshal(requestPayload)
+	if err != nil {
+		log.Fatalf("Error marshaling JSON payload: %v", err)
+		return err.Error()
+	}
+
+	// 6. Send HTTP POST Request
+	resp, err := http.Post(ollamaEndpoint, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		log.Fatalf("Error sending HTTP request: %v", err)
+		return err.Error()
+	}
+	defer resp.Body.Close()
+
+	// 7. Handle Response
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body) // Read body for error details
+		log.Fatalf("HTTP request failed with status code: %d, body: %s", resp.StatusCode, string(body))
+		return resp.Status
+	}
+
+	// Stream the response (Ollama often streams responses)
+	decoder := json.NewDecoder(resp.Body)
+	type OllamaResponse struct {
+		Response string `json:"response"`
+		Done     bool   `json:"done"`
+	}
+	var fullResponse strings.Builder
+	for {
+		var chunk OllamaResponse
+		if err := decoder.Decode(&chunk); err != nil {
+			// handle error
+		}
+		fullResponse.WriteString(chunk.Response)
+		if chunk.Done {
+			break
+		}
+	}
+
+	return fullResponse.String()
+}
+
+// loadImageBase64 loads an image from a file and encodes it to base64
+func loadImageBase64(imagePath string) (string, error) {
+	imgFile, err := os.Open(imagePath)
+	if err != nil {
+		return "", fmt.Errorf("error opening image file: %w", err)
+	}
+	defer imgFile.Close()
+
+	imgBytes, err := ioutil.ReadAll(imgFile)
+	if err != nil {
+		return "", fmt.Errorf("error reading image file: %w", err)
+	}
+
+	base64String := base64.StdEncoding.EncodeToString(imgBytes)
+	return base64String, nil
 }

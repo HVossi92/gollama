@@ -38,7 +38,7 @@ body {
 }
 
 .chat-container {
-    height: calc(100vh - 70px);
+    min-height: 64rem;
     display: flex;
     flex-direction: column;
 }
