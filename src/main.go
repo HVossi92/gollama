@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/hvossi92/gollama/src/llm"
 	"github.com/hvossi92/gollama/src/services"
 )
 
@@ -41,8 +40,7 @@ func main() {
 	// Serve embedded static files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
 
-	services.SetupDb()
-	services.CreateTestVectors()
+	services.SetUpVectorDb(true)
 
 	fmt.Println("Server listening on port 2048")
 	err = http.ListenAndServe(":2048", nil)
