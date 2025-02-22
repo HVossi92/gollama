@@ -28,5 +28,10 @@
                 <p class="mb-0">Upload an image to begin annotation</p>
             </div>
         </div>
+
+        <button hx-delete="/upload" type="submit" class="btn btn-danger" hx-target="#prune-response">
+            <i class="bi bi-cloud-upload me-2"></i>Prune all uploads
+            <span class="text-success" id="prune-response"></span>
+        </button>
     </div>
 </div>

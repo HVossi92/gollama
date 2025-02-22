@@ -17,13 +17,14 @@ type FileUrl struct {
 
 // VectorDBService represents the service responsible for the vector database.
 type UploadService struct {
-	templates *template.Template
-	fileURL   string
-	filename  string
+	templates     *template.Template
+	fileURL       string
+	filename      string
+	ollamaService *OllamaService
 }
 
-func SetUploadService(templates *template.Template) (*UploadService, error) {
-	return &UploadService{templates: templates}, nil
+func SetUploadService(templates *template.Template, ollamaService *OllamaService) *UploadService {
+	return &UploadService{templates: templates, ollamaService: ollamaService}
 }
 
 func (s *UploadService) UploadAndSaveImage(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +112,11 @@ func (s *UploadService) SubmitAnnotationsHandler(w http.ResponseWriter, r *http.
 	annotationData := r.Form.Get("annotations") // Get the JSON string from hx-vals
 
 	message := "I am giving you annotation data for the provided image, denoting a rectangular area of the image. x, y, w, h and are pixel, so the box starts at x pixels from the left and y pixels from the top. It is w pixels wide and h pixels high. Explain what you see in the box, considering the marked areas."
-	aiResponse := SendImageToOllama(message, s.filename, annotationData)
+	aiResponse, err := s.ollamaService.SendImageToOllama(message, s.filename, annotationData)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	data := struct {
 		UserMessage string

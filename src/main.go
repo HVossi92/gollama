@@ -17,50 +17,66 @@ var templatesFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
-// Store parsed templates globally
-var templates *template.Template
+// Server struct to hold all services and templates
+type Server struct {
+	templates     *template.Template
+	staticSubFS   fs.FS
+	uploadService *services.UploadService
+	vectorDB      *services.VectorDB
+	ollamaService *services.OllamaService
+}
 
-// Define a struct to hold image data
-
-func main() {
-	// Parse all templates at startup
-	var err error
-	templates, err = template.ParseFS(templatesFS,
-		"templates/*.html",    // Match HTML files in main directory
-		"templates/**/*.html", // Match HTML files in all subdirectories
+// NewServer initializes and returns a new Server instance with all services set up.
+func NewServer() (*Server, error) {
+	// Parse templates
+	templates, err := template.ParseFS(templatesFS,
+		"templates/*.html",
+		"templates/**/*.html",
 	)
 	if err != nil {
-		log.Fatalf("Failed to parse templates: %v", err)
+		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
 
 	// Create sub filesystem for static assets
 	staticSubFS, err := fs.Sub(staticFS, "static")
 	if err != nil {
-		log.Fatal("Failed to create sub filesystem:", err)
+		return nil, fmt.Errorf("failed to create sub filesystem: %w", err)
 	}
 
-	uploadService, err := services.SetUploadService(templates)
+	vectorDB, err := services.SetUpVectorDB("gollama.db", false)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("failed to set up VectorDB service: %w", err)
 	}
-	vectorService, err := services.SetUpVectorDBService("gollama.db", true)
+
+	ollamaService := services.SetUpOllamaService()
+	uploadService := services.SetUploadService(templates, ollamaService)
+
+	return &Server{
+		templates:     templates,
+		staticSubFS:   staticSubFS,
+		uploadService: uploadService,
+		vectorDB:      vectorDB,
+		ollamaService: ollamaService,
+	}, nil
+}
+
+func main() {
+	server, err := NewServer()
 	if err != nil {
-		log.Fatalf("Failed to set up VectorDB service: %v", err)
+		log.Fatalf("Failed to initialize server: %v", err)
 	}
-	defer vectorService.Close() // Important to close the service when done
+	defer server.vectorDB.Close() // Important to close VectorDB service when done
 
-	http.HandleFunc("/", handleChat)
-	http.HandleFunc("POST /chat", handlePostChat)
-	http.HandleFunc("POST /upload/image", uploadService.UploadAndSaveImage)
-	http.HandleFunc("POST /vector", vectorService.UploadDocumentToVectorDB)
-	http.HandleFunc("GET /annotation-ui", uploadService.AnnotationUIHandler)
-	http.HandleFunc("POST /submit-annotations", uploadService.SubmitAnnotationsHandler)
-	http.HandleFunc("GET /cancel-annotation", uploadService.CancelAnnotationHandler)
-	http.HandleFunc("DELETE /upload", uploadService.PruneUploads)
-	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads")))) // Serve uploaded images
-
-	// Serve embedded static files
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
+	http.HandleFunc("/", server.handleChat)
+	http.HandleFunc("POST /chat", server.handlePostChat)
+	http.HandleFunc("POST /upload/image", server.uploadService.UploadAndSaveImage)
+	http.HandleFunc("POST /vector", server.vectorDB.UploadVectors)
+	http.HandleFunc("GET /annotation-ui", server.uploadService.AnnotationUIHandler)
+	http.HandleFunc("POST /submit-annotations", server.uploadService.SubmitAnnotationsHandler)
+	http.HandleFunc("GET /cancel-annotation", server.uploadService.CancelAnnotationHandler)
+	http.HandleFunc("DELETE /upload", server.uploadService.PruneUploads)
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(server.staticSubFS))))
 
 	fmt.Println("Server listening on port 2048")
 	err = http.ListenAndServe(":2048", nil)
@@ -69,26 +85,29 @@ func main() {
 	}
 }
 
-func handleChat(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 
-	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "index.html", nil)
+	err := s.templates.ExecuteTemplate(w, "index.html", nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error executing template: %v", err), http.StatusInternalServerError)
 	}
 }
 
-func handlePostChat(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePostChat(w http.ResponseWriter, r *http.Request) {
 	message := r.FormValue("message")
 
 	fmt.Println("Asking LLM")
-	aiResponse := services.AskLlm(message)
+	aiResponse, err := s.ollamaService.AskLLM(message)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		panic(err)
+	}
 	// Simulate AI response
-	fmt.Printf("AI Response: You said: %s", message)
+	fmt.Printf("AI Response: %s", aiResponse)
 
 	data := struct {
 		UserMessage string
@@ -97,9 +116,8 @@ func handlePostChat(w http.ResponseWriter, r *http.Request) {
 		UserMessage: message,
 		AIResponse:  aiResponse,
 	}
-	err := templates.ExecuteTemplate(w, "message.html", data) // Use pre-parsed template
+	err = s.templates.ExecuteTemplate(w, "message.html", data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
 }

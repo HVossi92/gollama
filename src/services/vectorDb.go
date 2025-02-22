@@ -4,24 +4,22 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
+	"strings"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// VectorDBService represents the service responsible for the vector database.
-type VectorDBService struct {
-	db            *sql.DB
-	uploadService *UploadService
+// VectorDB represents the service responsible for the vector database.
+type VectorDB struct {
+	db *sql.DB
 }
 
-// SetUpVectorDBService creates and initializes a new VectorDBService.
-func SetUpVectorDBService(dbPath string, overwrite bool) (*VectorDBService, error) {
+// SetUpVectorDB creates and initializes a new VectorDBService.
+func SetUpVectorDB(dbPath string, overwrite bool) (*VectorDB, error) {
 	if overwrite {
 		log.Println("Overwriting existing database (if it exists)")
 		if err := os.Remove(dbPath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -44,17 +42,11 @@ func SetUpVectorDBService(dbPath string, overwrite bool) (*VectorDBService, erro
 	}
 	log.Printf("vec_version=%s\n", vecVersion)
 
-	// Consider moving testDb logic out of setup if it's not strictly part of initialization.
-	if err := testDb(db); err != nil { // Pass logger for better context
-		db.Close()
-		return nil, fmt.Errorf("database test failed: %w", err)
-	}
-
-	return &VectorDBService{db: db}, nil
+	return &VectorDB{db: db}, nil
 }
 
 // Close closes the database connection.  Good practice to add a Close method.
-func (s *VectorDBService) Close() error {
+func (s *VectorDB) Close() error {
 	if s.db != nil {
 		return s.db.Close()
 	}
@@ -62,7 +54,7 @@ func (s *VectorDBService) Close() error {
 }
 
 // GetDB returns the underlying sql.DB connection (for use within the service package).
-func (s *VectorDBService) GetDB() *sql.DB {
+func (s *VectorDB) GetDB() *sql.DB {
 	return s.db
 }
 
@@ -126,32 +118,11 @@ func testDb(db *sql.DB) error {
 	return nil
 }
 
-func (s *VectorDBService) UploadDocumentToVectorDB(w http.ResponseWriter, r *http.Request) {
-	file, header, err := s.uploadService.handleFileUpload(r)
-	if err != nil {
-		w.Write([]byte("Failed to uploaded document to vector DB"))
+func (s *VectorDB) UploadVectors(w http.ResponseWriter, r *http.Request) {
+	text := r.FormValue("vectors")
+	if text == "" {
+		http.Error(w, "No data provided", http.StatusBadRequest)
 	}
-	ext := filepath.Ext(header.Filename)
-
-	if ext == ".jsonl" {
-		fmt.Println("JSONL")
-	} else if ext == ".txt" {
-		fmt.Println("TXT")
-	} else if ext == ".pdf" {
-		fmt.Println("PDF")
-	} else if ext == ".csv" {
-		fmt.Println("CSV")
-	} else if ext == ".json" {
-		fmt.Println("JSON")
-	} else {
-		w.Write([]byte("Unsupported file type"))
-	}
-	// print text from File
-	text, err := io.ReadAll(file)
-	if err != nil {
-		w.Write([]byte("Failed to read document from file"))
-	}
-	fmt.Println(string(text))
-
-	w.Write([]byte("Document uploaded to vector DB"))
+	fmt.Println(strings.Trim(text, " "))
+	w.Write([]byte("Data uploaded to vector DB"))
 }

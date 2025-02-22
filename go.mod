@@ -8,3 +8,5 @@ require (
 	github.com/philippgille/chromem-go v0.7.0
 	github.com/sashabaranov/go-openai v1.37.0
 )
+
+require github.com/rsc/pdf v0.1.1 // indirect
