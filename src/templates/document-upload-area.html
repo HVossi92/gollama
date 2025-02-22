@@ -1,0 +1,29 @@
+<div class="card" style="background-color: var(--chat-bg); border: 1px solid var(--message-border);">
+    <div class="card-body">
+        <h5 class="card-title mb-4" style="color: var(--body-color);">Vector database upload area</h5>
+
+        <!-- Image Upload Form -->
+        <form hx-post="/vector" hx-target="#image-display-area" hx-swap="innerHTML" enctype="multipart/form-data"
+            class="mb-4">
+            <div class="mb-3">
+                <label for="image-upload" class="form-label" style="color: var(--body-color);">
+                    Upload a file to add to the vector database
+                </label>
+                <!-- <input class="form-control form-control-lg" type="file" name="file" id="image-upload"
+                    accept="image/*,text/plain,application/pdf,text/csv,application/json,application/jsonl,.txt,.pdf,.csv,.json"> -->
+                <input class="form-control form-control-lg" type="file" name="file" id="image-upload"
+                    accept=".jsonl,text/plain,application/pdf,text/csv,application/json,.txt,.pdf,.csv,.json">
+                <div class="form-text" style="color: var(--body-color);">
+                    Supported formats: TXT, PDF, CSV, JSONL & JSON
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-cloud-upload me-2"></i>Upload document
+            </button>
+        </form>
+        <button hx-delete="/upload" type="submit" class="btn btn-danger" hx-target="#prune-response">
+            <i class="bi bi-cloud-upload me-2"></i>Prune all uploads
+        </button>
+        <span class="text-success" id="prune-response"></span>
+    </div>
+</div>

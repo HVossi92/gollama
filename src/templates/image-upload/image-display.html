@@ -1,0 +1,7 @@
+<div id="annotation-area" style="position: relative; display: inline-block;">
+    <img src="{{.FileURL}}" alt="Uploaded Image" style="max-width: 100%; height: auto;" id="uploaded-image"
+        draggable="false">
+    <button hx-get="/annotation-ui" hx-target="#annotation-area" hx-swap="outerHTML" class="btn btn-primary mt-2">
+        Start Annotation
+    </button>
+</div>

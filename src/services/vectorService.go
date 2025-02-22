@@ -4,8 +4,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"path/filepath"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	_ "github.com/mattn/go-sqlite3"
@@ -13,11 +16,12 @@ import (
 
 // VectorDBService represents the service responsible for the vector database.
 type VectorDBService struct {
-	db *sql.DB
+	db            *sql.DB
+	uploadService *UploadService
 }
 
-// NewVectorDBService creates and initializes a new VectorDBService.
-func NewVectorDBService(dbPath string, overwrite bool) (*VectorDBService, error) {
+// SetUpVectorDBService creates and initializes a new VectorDBService.
+func SetUpVectorDBService(dbPath string, overwrite bool) (*VectorDBService, error) {
 	if overwrite {
 		log.Println("Overwriting existing database (if it exists)")
 		if err := os.Remove(dbPath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -120,4 +124,34 @@ func testDb(db *sql.DB) error {
 		return fmt.Errorf("rows iteration error: %w", err)
 	}
 	return nil
+}
+
+func (s *VectorDBService) UploadDocumentToVectorDB(w http.ResponseWriter, r *http.Request) {
+	file, header, err := s.uploadService.handleFileUpload(r)
+	if err != nil {
+		w.Write([]byte("Failed to uploaded document to vector DB"))
+	}
+	ext := filepath.Ext(header.Filename)
+
+	if ext == ".jsonl" {
+		fmt.Println("JSONL")
+	} else if ext == ".txt" {
+		fmt.Println("TXT")
+	} else if ext == ".pdf" {
+		fmt.Println("PDF")
+	} else if ext == ".csv" {
+		fmt.Println("CSV")
+	} else if ext == ".json" {
+		fmt.Println("JSON")
+	} else {
+		w.Write([]byte("Unsupported file type"))
+	}
+	// print text from File
+	text, err := io.ReadAll(file)
+	if err != nil {
+		w.Write([]byte("Failed to read document from file"))
+	}
+	fmt.Println(string(text))
+
+	w.Write([]byte("Document uploaded to vector DB"))
 }

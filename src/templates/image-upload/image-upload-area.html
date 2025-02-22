@@ -1,0 +1,32 @@
+<!-- Image Annotation Area -->
+<div class="card" style="background-color: var(--chat-bg); border: 1px solid var(--message-border);">
+    <div class="card-body">
+        <h5 class="card-title mb-4" style="color: var(--body-color);">Image Annotation Tool</h5>
+
+        <!-- Image Upload Form -->
+        <form hx-post="/upload/image" hx-target="#image-display-area" hx-swap="innerHTML" enctype="multipart/form-data"
+            class="mb-4">
+            <div class="mb-3">
+                <label for="image-upload" class="form-label" style="color: var(--body-color);">
+                    Upload Image for Annotation
+                </label>
+                <input class="form-control form-control-lg" type="file" name="file" id="image-upload" accept="image/*">
+                <div class="form-text" style="color: var(--body-color);">
+                    Supported formats: JPG, PNG, GIF
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-cloud-upload me-2"></i>Upload Image
+            </button>
+        </form>
+
+        <!-- Image Display Area -->
+        <div id="image-display-area" class="text-center p-4 rounded"
+            style="background-color: var(--ai-message-bg); border: 1px solid var(--message-border);">
+            <div style="color: var(--body-color);">
+                <i class="bi bi-image fs-1 d-block mb-3"></i>
+                <p class="mb-0">Upload an image to begin annotation</p>
+            </div>
+        </div>
+    </div>
+</div>

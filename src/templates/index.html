@@ -71,18 +71,14 @@
             </form>
         </div>
 
-        <!-- Image Annotation Area -->
-        <div id="image-annotation-area">
-            <form hx-post="/upload" hx-target="#image-display-area" hx-swap="innerHTML" enctype="multipart/form-data">
-                <div class="mb-3">
-                    <label for="image-upload" class="form-label">Upload Image for Annotation</label>
-                    <input class="form-control" type="file" name="image" id="image-upload" accept="image/*">
-                </div>
-                <button type="submit" class="btn btn-secondary">Upload Image</button>
-            </form>
+        <br>
 
-            <div id="image-display-area">
-                <p>Upload an image to begin annotation.</p>
+        <div class="row">
+            <div class="col-sm">
+                {{template "image-upload-area.html" .}}
+            </div>
+            <div class="col-sm">
+                {{template "document-upload-area.html" .}}
             </div>
         </div>
     </div>
