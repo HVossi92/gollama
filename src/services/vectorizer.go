@@ -19,7 +19,7 @@ const embeddingModel = "nomic-embed-text"
 
 var collection *chromem.Collection
 
-func SetUpVectorDb(overwrite bool) {
+func SetUpVectorDbOld(overwrite bool) {
 	ctx := context.Background()
 	// Now we use our vector database for retrieval augmented generation (RAG),
 	// which means we provide the LLM with relevant knowledge.

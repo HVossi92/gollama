@@ -53,7 +53,11 @@ func main() {
 	// Serve embedded static files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
 
-	// services.SetUpVectorDb(true)
+	db, err := services.NewVectorDBService("gollama.db", true)
+	if err != nil {
+		log.Fatalf("Failed to set up VectorDB service: %v", err)
+	}
+	defer db.Close() // Important to close the service when done
 
 	fmt.Println("Server listening on port 2048")
 	err = http.ListenAndServe(":2048", nil)
