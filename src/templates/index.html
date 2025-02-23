@@ -61,7 +61,7 @@
 
         <!-- Input Area -->
         <div class="input-area">
-            <form hx-post="/chat" hx-target="#chat-messages" hx-swap="beforeend" hx-trigger="submit"
+            <form hx-post="/chat?use-rag=true" hx-target="#chat-messages" hx-swap="beforeend" hx-trigger="submit"
                 class="d-flex gap-2">
                 <textarea name="message" class="form-control" rows="3" placeholder="Type your message here..."
                     required></textarea>

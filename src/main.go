@@ -22,7 +22,7 @@ type Server struct {
 	templates     *template.Template
 	staticSubFS   fs.FS
 	uploadService *services.UploadService
-	vectorDB      *services.VectorDB
+	vectorDB      *services.VectorService
 	ollamaService *services.OllamaService
 }
 
@@ -43,13 +43,12 @@ func NewServer() (*Server, error) {
 		return nil, fmt.Errorf("failed to create sub filesystem: %w", err)
 	}
 
-	vectorDB, err := services.SetUpVectorDB("gollama.db", false)
+	ollamaService := services.SetUpOllamaService()
+	uploadService := services.SetUploadService(templates, ollamaService)
+	vectorDB, err := services.SetUpVectorService("gollama.db", false, ollamaService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to set up VectorDB service: %w", err)
 	}
-
-	ollamaService := services.SetUpOllamaService()
-	uploadService := services.SetUploadService(templates, ollamaService)
 
 	return &Server{
 		templates:     templates,
@@ -70,6 +69,7 @@ func main() {
 	http.HandleFunc("/", server.handleChat)
 	http.HandleFunc("POST /chat", server.handlePostChat)
 	http.HandleFunc("POST /upload/image", server.uploadService.UploadAndSaveImage)
+	http.HandleFunc("GET /vector", server.vectorDB.GetVectors)
 	http.HandleFunc("POST /vector", server.vectorDB.UploadVectors)
 	http.HandleFunc("GET /annotation-ui", server.uploadService.AnnotationUIHandler)
 	http.HandleFunc("POST /submit-annotations", server.uploadService.SubmitAnnotationsHandler)
@@ -99,9 +99,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePostChat(w http.ResponseWriter, r *http.Request) {
 	message := r.FormValue("message")
+	doUseRag := r.URL.Query().Get("use-rag") == "true"
 
 	fmt.Println("Asking LLM")
-	aiResponse, err := s.ollamaService.AskLLM(message)
+	aiResponse, err := s.ollamaService.AskLLM(message, doUseRag, s.vectorDB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		panic(err)

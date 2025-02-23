@@ -1,34 +1,37 @@
 package services
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
+	"strings"
+
+	"github.com/hvossi92/gollama/src/utils"
 )
 
 type OllamaService struct {
-	url string
+	chatEndpoint      string
+	generateEndpoint  string
+	embeddingEndpoint string
 }
 
-// OllamaRequest struct to structure the request body
-type OllamaRequest struct {
-	Model    string          `json:"model"`
-	Messages []OllamaMessage `json:"messages"`
-	Stream   bool            `json:"stream"`
+// ChatRequest struct to structure the request body
+type ChatRequest struct {
+	Model    string        `json:"model"`
+	Messages []ChatMessage `json:"messages"`
+	Stream   bool          `json:"stream"`
 }
 
-type OllamaMessage struct {
+type ChatMessage struct {
 	Role    string   `json:"role"`
 	Content string   `json:"content"`
 	Images  []string `json:"images,omitempty"`
 }
 
-type OllamaChatResponse struct { // New struct for /api/chat response
+type ChatResponse struct { // New struct for /api/chat response
 	Model              string              `json:"model"`
 	CreatedAt          string              `json:"created_at"`
 	Message            ChatMessageResponse `json:"message"` // <--- Changed to ChatMessageResponse struct
@@ -42,9 +45,42 @@ type OllamaChatResponse struct { // New struct for /api/chat response
 	EvalDuration       int64               `json:"eval_duration"`
 }
 
+type GenerateRequest struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+	Stream bool   `json:"stream"`
+}
+
+type GenerateResponse struct { // New struct for /api/chat response
+	Model              string `json:"model"`
+	CreatedAt          string `json:"created_at"`
+	Response           string `json:"message"` // <--- Changed to ChatMessageResponse struct
+	Done               bool   `json:"done"`
+	Context            []int  `json:"context"`
+	TotalDuration      int64  `json:"total_duration"`
+	LoadDuration       int64  `json:"load_duration"`
+	PromptEvalCount    int    `json:"prompt_eval_count"`
+	PromptEvalDuration int64  `json:"prompt_eval_duration"`
+	EvalCount          int    `json:"eval_count"`
+	EvalDuration       int64  `json:"eval_duration"`
+}
+
 type ChatMessageResponse struct { // Struct for the nested "message" object
 	Role    string `json:"role"`
 	Content string `json:"content"` // <--- The text response is here
+}
+
+type EmbeddingRequest struct {
+	Model string `json:"model"`
+	Input string `json:"input"`
+}
+
+type EmbeddingResponse struct {
+	Model             string      `json:"model"`
+	Embeddings        [][]float32 `json:"embeddings"`
+	Total_duration    int
+	Load_duration     int
+	Prompt_eval_count int
 }
 
 type ImageMetadata struct {
@@ -64,7 +100,7 @@ type GenerateOptions struct {
 
 // SetUpVectorDBService creates and initializes a new VectorDBService.
 func SetUpOllamaService() *OllamaService {
-	return &OllamaService{url: "http://192.168.178.105:11434/api/chat"}
+	return &OllamaService{chatEndpoint: "http://192.168.178.105:11434/api/chat", generateEndpoint: "http://192.168.178.105:11434/api/generate", embeddingEndpoint: "http://192.168.178.105:11434/api/embed"}
 }
 
 var questionSystemPrompt = `
@@ -88,49 +124,76 @@ Anything between the following 'context' XML blocks is retrieved from the knowle
 Don't mention the knowledge base, context or search results in your answer.
 `
 
-func (s *OllamaService) AskLLM(question string) (string, error) {
-	messages := []OllamaMessage{
-		{
-			Role:    "system",
-			Content: questionSystemPrompt,
-		}, {
-			Role:    "user",
-			Content: "Question: " + question,
-		},
+func (s *OllamaService) AskLLM(question string, useVectorDb bool, vectorService *VectorService) (string, error) {
+	var messages []ChatMessage
+
+	if useVectorDb {
+		// 1. Embed the question to find relevant chunks
+		questionEmbedding, err := s.GetVectorEmbedding(question)
+		if err != nil {
+			return "", fmt.Errorf("failed to embed question: %w", err)
+		}
+
+		// 2. Query vector DB to find similar chunks
+		similarItems, err := vectorService.FindSimilarVectors(questionEmbedding)
+		if err != nil {
+			return "", fmt.Errorf("failed to find similar vectors: %w", err)
+		}
+
+		for _, item := range similarItems {
+			fmt.Println(item.Content)
+		}
+
+		// 3. Construct context from retrieved chunks
+		context := ""
+		if len(similarItems) > 0 {
+			contextBuilder := strings.Builder{}
+			contextBuilder.WriteString("Context:\n")
+			for _, item := range similarItems {
+				contextBuilder.WriteString(item.Content)
+				contextBuilder.WriteString("\n---\n") // Separator between chunks
+			}
+			context = contextBuilder.String()
+		} else {
+			context = "No relevant context found in the database.\n"
+		}
+
+		// 4. Create prompt with context and question
+		messages = []ChatMessage{
+			{
+				Role:    "system",
+				Content: questionSystemPrompt,
+			}, {
+				Role:    "user",
+				Content: "<context>" + context + "</context>" + "\nQuestion: " + question, // Combine context and question
+			},
+		}
+	} else {
+		// 5. If not using vector DB, use a simple prompt with just the question
+		messages = []ChatMessage{
+			{
+				Role:    "system",
+				Content: questionSystemPrompt,
+			}, {
+				Role:    "user",
+				Content: "Question: " + question,
+			},
+		}
 	}
-	request := OllamaRequest{
-		Model:    "qwen_20b_solid:latest",
+
+	// 6. Make the Chat Request to Ollama
+	request := ChatRequest{ // Use ChatRequest struct
+		Model:    "llama3.1:8b-instruct-q8_0",
 		Messages: messages,
 		Stream:   false,
 	}
-	payload, err := json.Marshal(request)
-	if err != nil {
-		return "", err
-	}
-
-	response, err := http.Post(s.url, "application/json", bytes.NewBuffer(payload))
+	chatResponse, err := utils.SendPostRequest[ChatRequest, ChatResponse](s.chatEndpoint, request) // Use ChatRequest and ChatResponse
 	if err != nil {
 		fmt.Println(err.Error())
 		return "", err
 	}
-	defer response.Body.Close()
 
-	// --- Capture and Print Raw Response Body ---
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println("Error reading response body:", err)
-		return "", err
-	}
-	response.Body.Close() // Important: Close response.Body after reading
-
-	ollamaResponse := &OllamaChatResponse{} // <--- Use OllamaChatResponse struct
-	err = json.Unmarshal(body, &ollamaResponse)
-	if err != nil {
-		fmt.Println("Error decoding JSON:", err)
-		return "", err
-	}
-
-	return ollamaResponse.Message.Content, nil // Return ollamaResponse.Message.Content
+	return chatResponse.Message.Content, nil // Return response from LLM
 }
 
 var imageSystemPrompt = `SYSTEM PROMPT: You are an expert at analyzing images and pictures. The user may send additional regions of interest in the form of coordinates, denoting user drawn boxes.
@@ -155,7 +218,7 @@ func (s *OllamaService) SendImageToOllama(question string, imagePath string, ann
 		return "", err
 	}
 
-	messages := []OllamaMessage{
+	messages := []ChatMessage{
 		{
 			Role:    "system",
 			Content: imageSystemPrompt,
@@ -165,43 +228,19 @@ func (s *OllamaService) SendImageToOllama(question string, imagePath string, ann
 			Images:  []string{base64Image},
 		},
 	}
-	request := OllamaRequest{
+	request := ChatRequest{
 		Model:    modelName,
 		Messages: messages,
 		Stream:   false,
 	}
 
-	payload, err := json.Marshal(request)
-	if err != nil {
-		return "", err
-	}
-
-	fmt.Println("Sending image to: ", s.url)
-	response, err := http.Post(s.url, "application/json", bytes.NewBuffer(payload))
-	fmt.Println(response)
-	fmt.Println(err)
+	response, err := utils.SendPostRequest[ChatRequest, ChatResponse](s.chatEndpoint, request)
 	if err != nil {
 		fmt.Println(err.Error())
 		return "", err
 	}
-	defer response.Body.Close()
 
-	// --- Capture and Print Raw Response Body ---
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println("Error reading response body:", err)
-		return "", err
-	}
-	response.Body.Close() // Important: Close response.Body after reading
-
-	ollamaResponse := &OllamaChatResponse{} // <--- Use OllamaChatResponse struct
-	err = json.Unmarshal(body, &ollamaResponse)
-	if err != nil {
-		fmt.Println("Error decoding JSON:", err)
-		return "", err
-	}
-
-	return ollamaResponse.Message.Content, nil
+	return response.Message.Content, nil
 }
 
 // loadImageBase64 loads an image from a file and encodes it to base64
@@ -219,4 +258,19 @@ func loadImageBase64(imagePath string) (string, error) {
 
 	base64String := base64.StdEncoding.EncodeToString(imgBytes)
 	return base64String, nil
+}
+
+func (s *OllamaService) GetVectorEmbedding(text string) ([]float32, error) {
+	request := EmbeddingRequest{
+		Model: "nomic-embed-text:latest",
+		Input: text,
+	}
+
+	fmt.Println("Generating vector embeddings", s.embeddingEndpoint)
+	ollamaResponse, err := utils.SendPostRequest[EmbeddingRequest, EmbeddingResponse](s.embeddingEndpoint, request)
+	if err != nil {
+		fmt.Println(err.Error())
+		return nil, err
+	}
+	return ollamaResponse.Embeddings[0], nil // Return ollamaResponse.Message.Content
 }
