@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/hvossi92/gollama/src/utils"
 )
@@ -124,77 +123,77 @@ Anything between the following 'context' XML blocks is retrieved from the knowle
 Don't mention the knowledge base, context or search results in your answer.
 `
 
-func (s *OllamaService) AskLLM(question string, useVectorDb bool, vectorService *VectorService) (string, error) {
-	var messages []ChatMessage
+// func (s *OllamaService) AskLLM(question string, useVectorDb bool, vectorService *VectorService) (string, error) {
+// 	var messages []ChatMessage
 
-	if useVectorDb {
-		// 1. Embed the question to find relevant chunks
-		questionEmbedding, err := s.GetVectorEmbedding(question)
-		if err != nil {
-			return "", fmt.Errorf("failed to embed question: %w", err)
-		}
+// 	if useVectorDb {
+// 		// 1. Embed the question to find relevant chunks
+// 		questionEmbedding, err := s.GetVectorEmbedding(question)
+// 		if err != nil {
+// 			return "", fmt.Errorf("failed to embed question: %w", err)
+// 		}
 
-		// 2. Query vector DB to find similar chunks
-		similarItems, err := vectorService.FindSimilarVectors(questionEmbedding)
-		if err != nil {
-			return "", fmt.Errorf("failed to find similar vectors: %w", err)
-		}
+// 		// 2. Query vector DB to find similar chunks
+// 		similarItems, err := vectorService.FindSimilarVectors(questionEmbedding)
+// 		if err != nil {
+// 			return "", fmt.Errorf("failed to find similar vectors: %w", err)
+// 		}
 
-		for _, item := range similarItems {
-			fmt.Println(item.Content)
-		}
+// 		for _, item := range similarItems {
+// 			fmt.Println(item.Content)
+// 		}
 
-		// 3. Construct context from retrieved chunks
-		context := ""
-		if len(similarItems) > 0 {
-			contextBuilder := strings.Builder{}
-			contextBuilder.WriteString("Context:\n")
-			for _, item := range similarItems {
-				contextBuilder.WriteString(item.Content)
-				contextBuilder.WriteString("\n---\n") // Separator between chunks
-			}
-			context = contextBuilder.String()
-		} else {
-			context = "No relevant context found in the database.\n"
-		}
+// 		// 3. Construct context from retrieved chunks
+// 		context := ""
+// 		if len(similarItems) > 0 {
+// 			contextBuilder := strings.Builder{}
+// 			contextBuilder.WriteString("Context:\n")
+// 			for _, item := range similarItems {
+// 				contextBuilder.WriteString(item.Content)
+// 				contextBuilder.WriteString("\n---\n") // Separator between chunks
+// 			}
+// 			context = contextBuilder.String()
+// 		} else {
+// 			context = "No relevant context found in the database.\n"
+// 		}
 
-		// 4. Create prompt with context and question
-		messages = []ChatMessage{
-			{
-				Role:    "system",
-				Content: questionSystemPrompt,
-			}, {
-				Role:    "user",
-				Content: "<context>" + context + "</context>" + "\nQuestion: " + question, // Combine context and question
-			},
-		}
-	} else {
-		// 5. If not using vector DB, use a simple prompt with just the question
-		messages = []ChatMessage{
-			{
-				Role:    "system",
-				Content: questionSystemPrompt,
-			}, {
-				Role:    "user",
-				Content: "Question: " + question,
-			},
-		}
-	}
+// 		// 4. Create prompt with context and question
+// 		messages = []ChatMessage{
+// 			{
+// 				Role:    "system",
+// 				Content: questionSystemPrompt,
+// 			}, {
+// 				Role:    "user",
+// 				Content: "<context>" + context + "</context>" + "\nQuestion: " + question, // Combine context and question
+// 			},
+// 		}
+// 	} else {
+// 		// 5. If not using vector DB, use a simple prompt with just the question
+// 		messages = []ChatMessage{
+// 			{
+// 				Role:    "system",
+// 				Content: questionSystemPrompt,
+// 			}, {
+// 				Role:    "user",
+// 				Content: "Question: " + question,
+// 			},
+// 		}
+// 	}
 
-	// 6. Make the Chat Request to Ollama
-	request := ChatRequest{ // Use ChatRequest struct
-		Model:    "llama3.1:8b-instruct-q8_0",
-		Messages: messages,
-		Stream:   false,
-	}
-	chatResponse, err := utils.SendPostRequest[ChatRequest, ChatResponse](s.chatEndpoint, request) // Use ChatRequest and ChatResponse
-	if err != nil {
-		fmt.Println(err.Error())
-		return "", err
-	}
+// 	// 6. Make the Chat Request to Ollama
+// 	request := ChatRequest{ // Use ChatRequest struct
+// 		Model:    "llama3.1:8b-instruct-q8_0",
+// 		Messages: messages,
+// 		Stream:   false,
+// 	}
+// 	chatResponse, err := utils.SendPostRequest[ChatRequest, ChatResponse](s.chatEndpoint, request) // Use ChatRequest and ChatResponse
+// 	if err != nil {
+// 		fmt.Println(err.Error())
+// 		return "", err
+// 	}
 
-	return chatResponse.Message.Content, nil // Return response from LLM
-}
+// 	return chatResponse.Message.Content, nil // Return response from LLM
+// }
 
 var imageSystemPrompt = `SYSTEM PROMPT: You are an expert at analyzing images and pictures. The user may send additional regions of interest in the form of coordinates, denoting user drawn boxes.
 These boxes are denoted as x and y coordinates as well as w (width) and h (height). If these coordinates are present, ONLY analyze the image in the specified region.

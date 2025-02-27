@@ -10,8 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 // VectorService represents the service responsible for the vector database.
@@ -47,7 +46,73 @@ func SetUpVectorService(dbPath string, overwrite bool, ollamaService *OllamaServ
 		db.Close() // Close the connection if table creation fails
 		return nil, fmt.Errorf("failed to ensure vector table exists: %w", err)
 	}
+
+	err = vectorService.testDb()
+	if err != nil {
+		db.Close() // Close the connection if table creation fails
+		return nil, fmt.Errorf("failed to ensure vector table exists: %w", err)
+	}
+
 	return vectorService, nil
+}
+
+func (s *VectorService) testDb() error {
+	fmt.Println("Creating test data")
+
+	_, err := s.db.Exec(
+		`INSERT INTO vectors (title, text, embedding) VALUES 
+		('NP', 'Napoleon', vector32('[0.800, 0.579, 0.481, 0.229]')),
+		('BHD', 'Black Hawk Down', vector32('[0.406, 0.027, 0.378, 0.056]')),
+		('G', 'Gladiator', vector32('[0.698, 0.140, 0.073, 0.125]')),
+		('BR', 'Blade Runner', vector32('[0.379, 0.637, 0.011, 0.647]'));`)
+	if err != nil {
+		return err
+	}
+
+	rows, err := s.db.Query(
+		`SELECT title, text, vector_extract(embedding),
+       vector_distance_cos(embedding, vector32('[0.064, 0.777, 0.661, 0.687]'))
+		FROM vectors
+		ORDER BY
+       vector_distance_cos(embedding, vector32('[0.064, 0.777, 0.661, 0.687]'))
+		ASC;`)
+	if err != nil {
+		return err
+	}
+
+	defer rows.Close()
+
+	// Print header
+	fmt.Printf("%-4s | %-20s | %-30s | %s\n", "ID", "Title", "Text", "Distance")
+	fmt.Println(strings.Repeat("-", 70))
+
+	// Iterate through results
+	var (
+		title     string
+		text      string
+		embedding string
+		distance  float64
+	)
+
+	for rows.Next() {
+		err := rows.Scan(&title, &text, &embedding, &distance)
+		if err != nil {
+			return err
+		}
+
+		// Format the output
+		fmt.Printf("%-4s | %-20s | %-30s | %.4f\n",
+			title,
+			text,
+			embedding,
+			distance)
+	}
+
+	if err = rows.Err(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Close closes the database connection.  Good practice to add a Close method.
@@ -64,100 +129,94 @@ func (s *VectorService) GetDB() *sql.DB {
 }
 
 func (s *VectorService) createDb(dbPath string) (*sql.DB, error) {
-	sqlite_vec.Auto() // Assuming Auto() is safe to call on every setup
-
-	db, err := sql.Open("sqlite3", dbPath)
+	// Connect to embedded libSQL
+	db, err := sql.Open("libsql", "file:"+dbPath)
 	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
 
-	var vecVersion string
-	err = db.QueryRow("select vec_version()").Scan(&vecVersion)
+	// Test connection
+	err = db.Ping()
 	if err != nil {
-		db.Close() // Close the connection if setup fails
-		return nil, err
+		log.Fatal("Connection failed:", err)
 	}
-	log.Printf("vec_version=%s\n", vecVersion)
+
+	log.Println("Connected to local libSQL database!")
 	return db, nil
 }
 
 // EnsureVectorTableExists checks if the vector table exists and creates it if not.
 func (s *VectorService) createVectorTable() error {
-	createTableSQL := fmt.Sprintf(`
-		CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
-			embedding float[%d],
-			content TEXT
-		)
-	`, 768)
-	_, err := s.db.Exec(createTableSQL)
+	_, err := s.db.Exec("CREATE TABLE IF NOT EXISTS vectors (id INTEGER PRIMARY KEY, title TEXT, text TEXT, embedding F32_BLOB(4))")
 	if err != nil {
-		return fmt.Errorf("failed to create virtual table: %w", err)
+		return err
 	}
+
 	return nil
 }
 
 // StoreChunkAndEmbedding saves a text chunk and its embedding to the SQLite vector database.
-func (s *VectorService) StoreChunkAndEmbedding(chunk string, embedding []float32) error {
-	if s.db == nil {
-		return fmt.Errorf("database connection is nil")
-	}
+// func (s *VectorService) StoreChunkAndEmbedding(chunk string, embedding []float32) error {
+// if s.db == nil {
+// 	return fmt.Errorf("database connection is nil")
+// }
 
-	serializedEmbedding, err := sqlite_vec.SerializeFloat32(embedding)
-	if err != nil {
-		return fmt.Errorf("failed to serialize float32 embedding: %w", err)
-	}
+// serializedEmbedding, err := sqlite_vec.SerializeFloat32(embedding)
+// if err != nil {
+// 	return fmt.Errorf("failed to serialize float32 embedding: %w", err)
+// }
 
-	_, err = s.db.Exec("INSERT INTO vec_items(embedding, content) VALUES (?, ?)", serializedEmbedding, chunk)
-	if err != nil {
-		return fmt.Errorf("failed to insert item into vector DB: %w", err)
-	}
-	return nil
-}
+// _, err = s.db.Exec("INSERT INTO vec_items(embedding, content) VALUES (?, ?)", serializedEmbedding, chunk)
+// if err != nil {
+// 	return fmt.Errorf("failed to insert item into vector DB: %w", err)
+// }
+// return nil
+// }
 
 func (s *VectorService) GetVectors(w http.ResponseWriter, r *http.Request) {
 	s.ReadAllVectors()
 	w.Write([]byte("Read vectors, see server logs"))
 }
 
-func (s *VectorService) UploadVectors(w http.ResponseWriter, r *http.Request) {
-	text := r.FormValue("vectors")
-	if text == "" {
-		http.Error(w, "No data provided", http.StatusBadRequest)
-		return
-	}
+// func (s *VectorService) UploadVectors(w http.ResponseWriter, r *http.Request) {
+// 	text := r.FormValue("vectors")
+// 	if text == "" {
+// 		http.Error(w, "No data provided", http.StatusBadRequest)
+// 		return
+// 	}
 
-	chunkedText, err := chunkText(strings.TrimSpace(text), 16, 4) // Chunk text first
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+// 	chunkedText, err := chunkText(strings.TrimSpace(text), 16, 4) // Chunk text first
+// 	if err != nil {
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
 
-	for i, chunk := range chunkedText { // Iterate through each text chunk
-		fmt.Printf("\nProcessing chunk %d: \"%s\"\n", i+1, chunk) // Indicate chunk being processed
+// 	for i, chunk := range chunkedText { // Iterate through each text chunk
+// 		fmt.Printf("\nProcessing chunk %d: \"%s\"\n", i+1, chunk) // Indicate chunk being processed
 
-		embeddings, err := s.ollamaService.GetVectorEmbedding(chunk) // Get embedding for each chunk
-		fmt.Printf("Embedding Dimension for chunk %d: %d\n", i+1, len(embeddings))
+// 		embeddings, err := s.ollamaService.GetVectorEmbedding(chunk) // Get embedding for each chunk
+// 		fmt.Printf("Embedding Dimension for chunk %d: %d\n", i+1, len(embeddings))
 
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error getting embedding for chunk %d: %v", i+1, err), http.StatusInternalServerError)
-			return // Stop processing if embedding fails for any chunk
-		}
+// 		if err != nil {
+// 			http.Error(w, fmt.Sprintf("Error getting embedding for chunk %d: %v", i+1, err), http.StatusInternalServerError)
+// 			return // Stop processing if embedding fails for any chunk
+// 		}
 
-		err = s.StoreChunkAndEmbedding(chunk, embeddings) // Store chunk and embedding in DB
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error storing vector for chunk %d: %v", i+1, err), http.StatusInternalServerError)
-			return
-		}
-		fmt.Printf("Chunk %d embeddings processed and stored in DB.\n", i+1)
-	}
+// 		err = s.StoreChunkAndEmbedding(chunk, embeddings) // Store chunk and embedding in DB
+// 		if err != nil {
+// 			http.Error(w, fmt.Sprintf("Error storing vector for chunk %d: %v", i+1, err), http.StatusInternalServerError)
+// 			return
+// 		}
+// 		fmt.Printf("Chunk %d embeddings processed and stored in DB.\n", i+1)
+// 	}
 
-	fmt.Println("\nAll Embeddings Generated and Stored in Vector DB")
-	fmt.Println("Total Chunks:", len(chunkedText))
+// 	fmt.Println("\nAll Embeddings Generated and Stored in Vector DB")
+// 	fmt.Println("Total Chunks:", len(chunkedText))
 
-	s.ReadAllVectors()
+// 	s.ReadAllVectors()
 
-	w.Write([]byte("Data uploaded to vector DB (embeddings generated and stored)"))
-}
+// 	w.Write([]byte("Data uploaded to vector DB (embeddings generated and stored)"))
+// }
 
 // chunkText chunks a string of text into smaller overlapping text chunks based on sentences.
 //
@@ -281,56 +340,56 @@ func (s *VectorService) ReadAllVectors() {
 }
 
 // FindSimilarVectors queries the vector DB for vectors similar to the given embedding.
-func (s *VectorService) FindSimilarVectors(queryEmbedding []float32) ([]VectorItem, error) {
-	if s.db == nil {
-		return nil, fmt.Errorf("database connection is nil in VectorService")
-	}
+// func (s *VectorService) FindSimilarVectors(queryEmbedding []float32) ([]VectorItem, error) {
+// if s.db == nil {
+// 	return nil, fmt.Errorf("database connection is nil in VectorService")
+// }
 
-	serializedQueryEmbedding, err := sqlite_vec.SerializeFloat32(queryEmbedding)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize query embedding: %w", err)
-	}
+// serializedQueryEmbedding, err := sqlite_vec.SerializeFloat32(queryEmbedding)
+// if err != nil {
+// 	return nil, fmt.Errorf("failed to serialize query embedding: %w", err)
+// }
 
-	rows, err := s.db.Query(`
-		SELECT
-			content,
-			embedding,
-			distance
-		FROM vec_items
-		WHERE embedding MATCH ?
-		ORDER BY distance
-		LIMIT 3 -- Limit to top 3 most similar vectors for context
-	`, serializedQueryEmbedding)
-	if err != nil {
-		return nil, fmt.Errorf("vector DB query failed: %w", err)
-	}
-	defer rows.Close()
+// rows, err := s.db.Query(`
+// 	SELECT
+// 		content,
+// 		embedding,
+// 		distance
+// 	FROM vec_items
+// 	WHERE embedding MATCH ?
+// 	ORDER BY distance
+// 	LIMIT 3 -- Limit to top 3 most similar vectors for context
+// `, serializedQueryEmbedding)
+// if err != nil {
+// 	return nil, fmt.Errorf("vector DB query failed: %w", err)
+// }
+// defer rows.Close()
 
-	var similarItems []VectorItem
-	for rows.Next() {
-		var content string
-		var serializedEmbedding []byte // Embedding is already []byte from DB
-		var distance float64           // Retrieve distance as well
+// var similarItems []VectorItem
+// for rows.Next() {
+// 	var content string
+// 	var serializedEmbedding []byte // Embedding is already []byte from DB
+// 	var distance float64           // Retrieve distance as well
 
-		if err := rows.Scan(&content, &serializedEmbedding, &distance); err != nil {
-			return nil, fmt.Errorf("failed to scan vector DB row: %w", err)
-		}
+// 	if err := rows.Scan(&content, &serializedEmbedding, &distance); err != nil {
+// 		return nil, fmt.Errorf("failed to scan vector DB row: %w", err)
+// 	}
 
-		// Deserialization is REMOVED here
-		// embedding, err := sqlite_vec.DeserializeFloat32(serializedEmbedding) // Removed DeserializeFloat32
-		// if err != nil {
-		// 	return nil, fmt.Errorf("failed to deserialize embedding from DB: %w", err)
-		// }
+// 	// Deserialization is REMOVED here
+// 	// embedding, err := sqlite_vec.DeserializeFloat32(serializedEmbedding) // Removed DeserializeFloat32
+// 	// if err != nil {
+// 	// 	return nil, fmt.Errorf("failed to deserialize embedding from DB: %w", err)
+// 	// }
 
-		similarItems = append(similarItems, VectorItem{
-			Content:   content,
-			Embedding: serializedEmbedding, // Store serialized embedding directly in VectorItem
-		})
-	}
+// 	similarItems = append(similarItems, VectorItem{
+// 		Content:   content,
+// 		Embedding: serializedEmbedding, // Store serialized embedding directly in VectorItem
+// 	})
+// }
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error during vector DB query: %w", err)
-	}
+// if err := rows.Err(); err != nil {
+// 	return nil, fmt.Errorf("rows iteration error during vector DB query: %w", err)
+// }
 
-	return similarItems, nil
-}
+// return similarItems, nil
+// }

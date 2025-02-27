@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 type FileUrl struct {

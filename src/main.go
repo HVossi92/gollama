@@ -45,7 +45,7 @@ func NewServer() (*Server, error) {
 
 	ollamaService := services.SetUpOllamaService()
 	uploadService := services.SetUploadService(templates, ollamaService)
-	vectorDB, err := services.SetUpVectorService("gollama.db", false, ollamaService)
+	vectorDB, err := services.SetUpVectorService("gollama.db", true, ollamaService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to set up VectorDB service: %w", err)
 	}
@@ -70,7 +70,7 @@ func main() {
 	http.HandleFunc("POST /chat", server.handlePostChat)
 	http.HandleFunc("POST /upload/image", server.uploadService.UploadAndSaveImage)
 	http.HandleFunc("GET /vector", server.vectorDB.GetVectors)
-	http.HandleFunc("POST /vector", server.vectorDB.UploadVectors)
+	// http.HandleFunc("POST /vector", server.vectorDB.UploadVectors)
 	http.HandleFunc("GET /annotation-ui", server.uploadService.AnnotationUIHandler)
 	http.HandleFunc("POST /submit-annotations", server.uploadService.SubmitAnnotationsHandler)
 	http.HandleFunc("GET /cancel-annotation", server.uploadService.CancelAnnotationHandler)
@@ -99,14 +99,16 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePostChat(w http.ResponseWriter, r *http.Request) {
 	message := r.FormValue("message")
-	doUseRag := r.URL.Query().Get("use-rag") == "true"
+	// doUseRag := r.URL.Query().Get("use-rag") == "true"
 
+	var err error
 	fmt.Println("Asking LLM")
-	aiResponse, err := s.ollamaService.AskLLM(message, doUseRag, s.vectorDB)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		panic(err)
-	}
+	// aiResponse, err := s.ollamaService.AskLLM(message, doUseRag, s.vectorDB)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	panic(err)
+	// }
+	aiResponse := "Delete me"
 	// Simulate AI response
 	fmt.Printf("AI Response: %s", aiResponse)
 
