@@ -3,8 +3,8 @@
         <h5 class="card-title mb-4" style="color: var(--body-color);">Vector database upload area</h5>
 
         <!-- Image Upload Form -->
-        <form hx-post="/vector" hx-target="#image-display-area" hx-swap="innerHTML" enctype="multipart/form-data"
-            class="mb-4">
+        <form hx-post="/vector" enctype="multipart/form-data" hx-target="#chat-messages" class="mb-4"
+            hx-swap="beforeend">
             <div class="mb-3">
                 <label for="image-upload" class="form-label" style="color: var(--body-color);">
                     Upload data to add to the vector database

@@ -45,7 +45,7 @@ func NewServer() (*Server, error) {
 
 	ollamaService := services.SetUpOllamaService()
 	uploadService := services.SetUploadService(templates, ollamaService)
-	vectorDB, err := services.SetUpVectorService("gollama.db", true, ollamaService)
+	vectorDB, err := services.SetUpVectorService("gollama.db", false, ollamaService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to set up VectorDB service: %w", err)
 	}
@@ -69,8 +69,8 @@ func main() {
 	http.HandleFunc("/", server.handleChat)
 	http.HandleFunc("POST /chat", server.handlePostChat)
 	http.HandleFunc("POST /upload/image", server.uploadService.UploadAndSaveImage)
-	http.HandleFunc("GET /vector", server.vectorDB.GetVectors)
-	// http.HandleFunc("POST /vector", server.vectorDB.UploadVectors)
+	http.HandleFunc("GET /vector", server.GetVectors)
+	http.HandleFunc("POST /vector", server.UploadVector)
 	http.HandleFunc("GET /annotation-ui", server.uploadService.AnnotationUIHandler)
 	http.HandleFunc("POST /submit-annotations", server.uploadService.SubmitAnnotationsHandler)
 	http.HandleFunc("GET /cancel-annotation", server.uploadService.CancelAnnotationHandler)
@@ -99,17 +99,15 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePostChat(w http.ResponseWriter, r *http.Request) {
 	message := r.FormValue("message")
-	// doUseRag := r.URL.Query().Get("use-rag") == "true"
+	doUseRag := r.URL.Query().Get("use-rag") == "true"
 
 	var err error
 	fmt.Println("Asking LLM")
-	// aiResponse, err := s.ollamaService.AskLLM(message, doUseRag, s.vectorDB)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	panic(err)
-	// }
-	aiResponse := "Delete me"
-	// Simulate AI response
+	aiResponse, err := s.ollamaService.AskLLM(message, doUseRag, s.vectorDB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		panic(err)
+	}
 	fmt.Printf("AI Response: %s", aiResponse)
 
 	data := struct {
@@ -118,6 +116,47 @@ func (s *Server) handlePostChat(w http.ResponseWriter, r *http.Request) {
 	}{
 		UserMessage: message,
 		AIResponse:  aiResponse,
+	}
+	err = s.templates.ExecuteTemplate(w, "message.html", data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) GetVectors(w http.ResponseWriter, r *http.Request) {
+	text, err := s.vectorDB.ReadAllVectors()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	data := struct {
+		UserMessage string
+		AIResponse  string
+	}{
+		UserMessage: "Get all vectors",
+		AIResponse:  text,
+	}
+	err = s.templates.ExecuteTemplate(w, "message.html", data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) UploadVector(w http.ResponseWriter, r *http.Request) {
+	text := r.FormValue("vectors")
+	if text == "" {
+		http.Error(w, "No data provided", http.StatusBadRequest)
+	}
+	err := s.vectorDB.SaveVectorToDb(text)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	data := struct {
+		UserMessage string
+		AIResponse  string
+	}{
+		UserMessage: "Save vector to DB",
+		AIResponse:  text,
 	}
 	err = s.templates.ExecuteTemplate(w, "message.html", data)
 	if err != nil {
