@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/hvossi92/gollama/src/services"
 )
@@ -65,6 +66,11 @@ func main() {
 		log.Fatalf("Failed to initialize server: %v", err)
 	}
 	defer server.vectorDB.Close() // Important to close VectorDB service when done
+
+	err = os.RemoveAll("./uploads")
+	if err != nil {
+		log.Fatalf("Failed to delete uploads directory: %v", err)
+	}
 
 	http.HandleFunc("/", server.handleChat)
 	http.HandleFunc("POST /chat", server.handlePostChat)
