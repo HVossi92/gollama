@@ -36,3 +36,5 @@ Ollama is easier for development and quicker iterations of testing different mod
 - Draw a rectangle around an area of interest.
 - Submit annotation
 - The picture will be formatted to base64, and the formatted image together with the rectangle coordinates will be sent to the LLM to be analyzed.
+
+![gollama-pic-s](https://github.com/user-attachments/assets/3d4dc558-0c54-4ab8-918a-e5a43495ff66)
