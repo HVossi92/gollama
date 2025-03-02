@@ -1,38 +1,87 @@
 # Gollama
 
-A very simplistic chatbot using Go on the backend, HTMX on the frontend and libsql as a vector database as well as Ollama to run the LLMs.
-This was just an exercise to learn the basics of the used technologies.
+A learning exercise project implementing a simple chatbot with RAG (Retrieval-Augmented Generation) capabilities and basic image analysis features. This project was created specifically to explore and learn the following technologies:
 
-## Required Ollama models or Llamafiles:
+- Go (Backend)
+- HTMX (Frontend)
+- LibSQL (Vector Database)
+- Ollama (Local LLM Runtime)
 
-Ollama is easier for development and quicker iterations of testing different models. But for deployment llamafiles would be easier.
+> **Note**: This is an educational project intended for learning purposes and should not be considered production-ready.
 
-- "llama3.1:8b-instruct-q8_0" for answering questions. It is a fairly small model, to make sure it can only answer questions by actually using RAG.
-- "nomic-embed-text:latest" for creating embeddings from text. This is a very fast model, specially for creating embeddings from text.
+## Features
 
-## Run
+- Chat interface with RAG capabilities
+- Vector database for storing and retrieving relevant context
+- Basic image analysis with region selection
+- Simple and lightweight frontend using HTMX
 
-- Dev: Simply run via `air`
-- Build: `make build`, since everything aside from the database file (which will be generated on startup) is statically embedded, it can be run and distributed as a single binary.
+## Prerequisites
 
-## Add RAG data to vector database
+### Required Ollama Models
 
-- Upload plain text via the 'Vector database upload area' in the frontend. Every upload will be chunked and saved to the DB.
+This project requires two specific models to be installed via Ollama:
 
-## Chat Workflow
+1. `llama3.1:8b-instruct-q8_0` - For question answering (deliberately using a smaller model to demonstrate RAG effectiveness)
+2. `nomic-embed-text:latest` - For fast and efficient text embedding generation
 
-- Upload data to the vector db, to make the system smarter by using RAG.
-- Send a request from the frontend chat interface to the backend.
-- The backend will forward that request to an embedding model, to get the question as a vector.
-- Then that vector question will be used to query the vector database, to find similar chunks of text.
-- Now the plain text question, together with the plain text chunks of text, will be sent to the LLM.
-- The LLM will generate a response based on that data, and either answer the question of say it doesn't know.
+Make sure to have [Ollama](https://ollama.ai) installed and these models pulled before running the application.
 
-## Image Workflow (just a small test case)
+## Development Setup
 
-- Choose an image file.
-- Upload, it will be saved to the backend.
-- Start annotation.
-- Draw a rectangle around an area of interest.
-- Submit annotation
-- The picture will be formatted to base64, and the formatted image together with the rectangle coordinates will be sent to the LLM to be analyzed.
+1. Install Go and Ollama
+2. Clone this repository
+3. Install [Air](https://github.com/cosmtrek/air) for hot reloading (optional but recommended for development)
+4. Run the development server:
+   ```bash
+   air
+   ```
+
+## Production Build
+
+The application can be built into a single binary that includes all static assets:
+
+```bash
+make build
+```
+
+The compiled binary will be available in the `build/` directory as `gollama`. The application is self-contained except for:
+
+- The database file (automatically generated on first run)
+- Ollama and its models (must be installed separately)
+
+## Usage Guide
+
+### Vector Database Setup
+
+1. Start the application
+2. Navigate to the "Vector Database Upload Area" in the web interface
+3. Upload plain text files that will serve as the knowledge base
+4. The text will be automatically chunked and stored in the vector database
+
+### Chat Interface
+
+1. Ensure you've uploaded some knowledge base text first
+2. Enter your question in the chat interface
+3. The system will:
+   - Convert your question into a vector
+   - Find relevant context from the vector database
+   - Use the LLM to generate an answer based on the retrieved context
+
+### Image Analysis
+
+1. Select an image file through the interface
+2. Upload the image
+3. Click "Start Annotation"
+4. Draw a rectangle around the area you want to analyze
+5. Submit the annotation
+6. The system will analyze the selected region using the LLM
+
+## Project Architecture
+
+- `src/` - Main application code
+  - `main.go` - Application entry point and server setup
+  - `services/` - Core business logic
+  - `templates/` - HTML templates
+  - `static/` - Frontend assets
+  - `utils/` - Helper functions
