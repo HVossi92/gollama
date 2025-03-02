@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/hvossi92/gollama/src/services"
 )
@@ -44,12 +45,16 @@ func NewServer() (*Server, error) {
 		return nil, fmt.Errorf("failed to create sub filesystem: %w", err)
 	}
 
-	ollamaService := services.SetUpOllamaService()
-	uploadService := services.SetUploadService(templates, ollamaService)
-	vectorDB, err := services.SetUpVectorService("gollama.db", false, ollamaService)
+	vectorDB, err := services.SetUDatabaseService("gollama.db", false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to set up VectorDB service: %w", err)
 	}
+	settings, err := vectorDB.GetSettings()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+	ollamaService := services.SetUpOllamaService(settings.URL, settings.LLM, settings.Embedding)
+	uploadService := services.SetUploadService(templates, ollamaService)
 
 	return &Server{
 		templates:     templates,
@@ -72,8 +77,8 @@ func main() {
 		log.Fatalf("Failed to delete uploads directory: %v", err)
 	}
 
-	http.HandleFunc("/", server.handleChat)
-	http.HandleFunc("POST /chat", server.handlePostChat)
+	http.HandleFunc("/", server.fetchIndexPage)
+	http.HandleFunc("POST /chat", server.fetchAiResponse)
 	http.HandleFunc("POST /upload/image", server.uploadService.UploadAndSaveImage)
 	http.HandleFunc("GET /vector", server.GetVectors)
 	http.HandleFunc("POST /vector", server.UploadVector)
@@ -81,6 +86,7 @@ func main() {
 	http.HandleFunc("POST /submit-annotations", server.uploadService.SubmitAnnotationsHandler)
 	http.HandleFunc("GET /cancel-annotation", server.uploadService.CancelAnnotationHandler)
 	http.HandleFunc("DELETE /upload", server.uploadService.PruneUploads)
+	http.HandleFunc("PUT /settings", server.UpdateSettings)
 	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(server.staticSubFS))))
 
@@ -91,19 +97,34 @@ func main() {
 	}
 }
 
-func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
+func (s *Server) fetchIndexPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 
-	err := s.templates.ExecuteTemplate(w, "index.html", nil)
+	settings, err := s.vectorDB.GetSettings()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data := struct {
+		URL       string
+		LLM       string
+		Embedding string
+	}{
+		URL:       settings.URL,
+		LLM:       settings.LLM,
+		Embedding: settings.Embedding,
+	}
+
+	err = s.templates.ExecuteTemplate(w, "index.html", data)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error executing template: %v", err), http.StatusInternalServerError)
 	}
 }
 
-func (s *Server) handlePostChat(w http.ResponseWriter, r *http.Request) {
+func (s *Server) fetchAiResponse(w http.ResponseWriter, r *http.Request) {
 	message := r.FormValue("message")
 	doUseRag := r.URL.Query().Get("use-rag") == "true"
 
@@ -151,22 +172,43 @@ func (s *Server) GetVectors(w http.ResponseWriter, r *http.Request) {
 func (s *Server) UploadVector(w http.ResponseWriter, r *http.Request) {
 	text := r.FormValue("vectors")
 	if text == "" {
-		http.Error(w, "No data provided", http.StatusBadRequest)
-	}
-	err := s.vectorDB.SaveVectorToDb(text)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "No data was provided", http.StatusBadRequest)
+		return
 	}
 
-	data := struct {
-		UserMessage string
-		AIResponse  string
-	}{
-		UserMessage: "Save vector to DB",
-		AIResponse:  text,
+	chunkedText, err := s.vectorDB.ChunkText(strings.TrimSpace(text), 16, 4) // Chunk text first
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	err = s.templates.ExecuteTemplate(w, "message.html", data)
+
+	for _, chunk := range chunkedText { // Iterate through each text chunk
+
+		embeddings, err := s.ollamaService.GetVectorEmbedding(chunk) // Get embedding for each chunk
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		err = s.vectorDB.StoreChunkAndEmbedding(chunk, embeddings) // Store chunk and embedding in DB
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+func (s *Server) UpdateSettings(w http.ResponseWriter, r *http.Request) {
+	err := s.vectorDB.UpdateSettings(r.FormValue("url"), r.FormValue("llm"), r.FormValue("embedding"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_, err = w.Write([]byte("Settings updated"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }

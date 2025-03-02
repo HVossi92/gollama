@@ -16,6 +16,8 @@ type OllamaService struct {
 	chatEndpoint      string
 	generateEndpoint  string
 	embeddingEndpoint string
+	llm               string
+	embeddingModel    string
 }
 
 // ChatRequest struct to structure the request body
@@ -99,8 +101,8 @@ type GenerateOptions struct {
 }
 
 // SetUpVectorDBService creates and initializes a new VectorDBService.
-func SetUpOllamaService() *OllamaService {
-	return &OllamaService{chatEndpoint: "http://192.168.178.105:11434/api/chat", generateEndpoint: "http://192.168.178.105:11434/api/generate", embeddingEndpoint: "http://192.168.178.105:11434/api/embed"}
+func SetUpOllamaService(url string, llm string, embedding string) *OllamaService {
+	return &OllamaService{chatEndpoint: url + "/api/chat", generateEndpoint: url + "/api/generate", embeddingEndpoint: url + "/api/embed", llm: llm, embeddingModel: embedding}
 }
 
 var questionSystemPrompt = `
@@ -179,7 +181,7 @@ func (s *OllamaService) AskLLM(question string, useVectorDb bool, vectorService 
 
 	// 6. Make the Chat Request to Ollama
 	request := ChatRequest{ // Use ChatRequest struct
-		Model:    "llama3.1:8b-instruct-q8_0",
+		Model:    s.llm,
 		Messages: messages,
 		Stream:   false,
 	}
@@ -258,7 +260,7 @@ func loadImageBase64(imagePath string) (string, error) {
 
 func (s *OllamaService) GetVectorEmbedding(text string) ([]float32, error) {
 	request := EmbeddingRequest{
-		Model: "nomic-embed-text:latest",
+		Model: s.embeddingModel,
 		Input: text,
 	}
 

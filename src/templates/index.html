@@ -38,58 +38,66 @@
         </div>
     </nav>
 
-    <div class="container py-4 chat-container">
-        <!-- Chat Messages Area -->
-        <div id="chat-messages" class="chat-messages">
-            <div class="message ai-message">
-                Hello! I'm Gollama. How can I assist you today?
-            </div>
-        </div>
+    <div class="row py-4" style="padding-right: 12px;">
+        <div class="col-sm">
+            <div class="container chat-container">
+                <!-- Chat Messages Area -->
+                <div id="chat-messages" class="chat-messages">
+                    <div class="message ai-message">
+                        Hello! I'm Gollama. How can I assist you today?
+                    </div>
+                </div>
 
-        <!-- Input Area -->
-        <div class="input-area">
-            <form hx-post="/chat?use-rag=true" hx-target="#chat-messages" hx-swap="beforeend" hx-trigger="submit"
-                hx-indicator="#spinner" hx-disabled-elt="#to-disable">
-                <textarea name="message" class="form-control" rows="3" placeholder="Type your message here..."
-                    required></textarea>
+                <!-- Input Area -->
+                <div class="input-area">
+                    <form hx-post="/chat?use-rag=true" hx-target="#chat-messages" hx-swap="beforeend"
+                        hx-trigger="submit" hx-indicator="#spinner" hx-disabled-elt="#to-disable">
+                        <textarea name="message" class="form-control" rows="3" placeholder="Type your message here..."
+                            required></textarea>
+                        <br>
+                        <button id="to-disable" type="submit" class="btn btn-primary send-button align-self-end px-4">
+                            Send
+                        </button>
+                        <span id="spinner" class="spinner-border spinner-border-sm htmx-indicator" role="status"
+                            aria-hidden="true"></span>
+                    </form>
+                </div>
+
                 <br>
-                <button id="to-disable" type="submit" class="btn btn-primary send-button align-self-end px-4">
-                    Send
-                </button>
-                <span id="spinner" class="spinner-border spinner-border-sm htmx-indicator" role="status"
-                    aria-hidden="true"></span>
-            </form>
-        </div>
 
-        <br>
-
-        <div class="row">
-            <div class="col-sm">
-                {{template "image-upload-area.html" .}}
-            </div>
-            <div class="col-sm">
-                {{template "vector-upload-area.html" .}}
+                <div class="row">
+                    <div class="col-sm">
+                        {{template "image-upload-area.html" .}}
+                    </div>
+                    <div class="col-sm">
+                        {{template "vector-upload-area.html" .}}
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+        <div class="col-sm-2">
+            <div class="card" style="background-color: var(--chat-bg); border: 1px solid var(--message-border);">
+                {{template "settings-form.html" .}}
+            </div>
+        </div>
 
-    <script>
-        // Theme toggle functionality
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-bs-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        <script>
+            // Theme toggle functionality
+            function toggleTheme() {
+                const html = document.documentElement;
+                const currentTheme = html.getAttribute('data-bs-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
 
-            html.setAttribute('data-bs-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-        }
+                html.setAttribute('data-bs-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+            }
 
-        // Set initial theme from localStorage
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-bs-theme', savedTheme);
-        });
-    </script>
+            // Set initial theme from localStorage
+            document.addEventListener('DOMContentLoaded', () => {
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                document.documentElement.setAttribute('data-bs-theme', savedTheme);
+            });
+        </script>
 </body>
 
 </html>

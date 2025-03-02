@@ -15,8 +15,7 @@ import (
 
 // VectorService represents the service responsible for the vector database.
 type VectorService struct {
-	db            *sql.DB
-	ollamaService *OllamaService
+	db *sql.DB
 }
 
 type VectorItem struct {
@@ -24,8 +23,14 @@ type VectorItem struct {
 	Embedding []byte
 }
 
-// SetUpVectorService creates and initializes a new VectorDBService.
-func SetUpVectorService(dbPath string, overwrite bool, ollamaService *OllamaService) (*VectorService, error) {
+type Settings struct {
+	URL       string
+	LLM       string
+	Embedding string
+}
+
+// SetUDatabaseService creates and initializes a new VectorDBService.
+func SetUDatabaseService(dbPath string, overwrite bool) (*VectorService, error) {
 	if overwrite {
 		log.Println("Overwriting existing database (if it exists)")
 		if err := os.Remove(dbPath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -34,7 +39,7 @@ func SetUpVectorService(dbPath string, overwrite bool, ollamaService *OllamaServ
 	}
 
 	// Create VectorService instance first
-	vectorService := &VectorService{db: nil, ollamaService: ollamaService}
+	vectorService := &VectorService{db: nil}
 	db, err := vectorService.createDb(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database: %w", err)
@@ -45,6 +50,11 @@ func SetUpVectorService(dbPath string, overwrite bool, ollamaService *OllamaServ
 	if err := vectorService.createVectorTable(); err != nil {
 		db.Close() // Close the connection if table creation fails
 		return nil, fmt.Errorf("failed to ensure vector table exists: %w", err)
+	}
+
+	if err := vectorService.createSettingsTable(); err != nil {
+		db.Close() // Close the connection if table creation fails
+		return nil, fmt.Errorf("failed to ensure settings table exists: %w", err)
 	}
 
 	return vectorService, nil
@@ -90,6 +100,40 @@ func (s *VectorService) createVectorTable() error {
 	return nil
 }
 
+func (s *VectorService) createSettingsTable() error {
+	// Create table if not exists
+	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS settings (
+		id INTEGER PRIMARY KEY, 
+		url TEXT, 
+		llm TEXT, 
+		embedding_model TEXT
+	) STRICT`)
+	if err != nil {
+		return fmt.Errorf("failed to create settings table: %w", err)
+	}
+
+	// Check if table is empty
+	var count int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM settings").Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to check settings table: %w", err)
+	}
+
+	// Insert default values only if table is empty
+	if count == 0 {
+		_, err = s.db.Exec(`INSERT INTO settings (url, llm, embedding_model) 
+			VALUES (?, ?, ?)`,
+			"http://192.168.178.105:11434",
+			"llama3.1:8b-instruct-q8_0",
+			"nomic-embed-text:latest")
+		if err != nil {
+			return fmt.Errorf("failed to insert default settings: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // StoreChunkAndEmbedding saves a text chunk and its embedding to the SQLite vector database.
 func (s *VectorService) StoreChunkAndEmbedding(chunk string, embedding []float32) error {
 	if s.db == nil {
@@ -125,29 +169,6 @@ func (s *VectorService) StoreChunkAndEmbedding(chunk string, embedding []float32
 	return nil
 }
 
-func (s *VectorService) SaveVectorToDb(vectors string) error {
-	chunkedText, err := chunkText(strings.TrimSpace(vectors), 16, 4) // Chunk text first
-	if err != nil {
-		return err
-	}
-
-	for i, chunk := range chunkedText { // Iterate through each text chunk
-
-		embeddings, err := s.ollamaService.GetVectorEmbedding(chunk) // Get embedding for each chunk
-
-		if err != nil {
-			return fmt.Errorf("rror getting embedding for chunk %d: %v", i+1, err)
-		}
-
-		err = s.StoreChunkAndEmbedding(chunk, embeddings) // Store chunk and embedding in DB
-		if err != nil {
-			return fmt.Errorf("Error storing vector for chunk %d: %v", i+1, err)
-		}
-	}
-
-	return nil
-}
-
 // chunkText chunks a string of text into smaller overlapping text chunks based on sentences.
 //
 // Parameters:
@@ -160,7 +181,7 @@ func (s *VectorService) SaveVectorToDb(vectors string) error {
 //
 //	[]string:  A slice of strings, where each string is a chunk of text (composed of sentences).
 //	error:     An error if the input parameters are invalid.
-func chunkText(text string, chunkSize int, chunkOverlap int) ([]string, error) {
+func (s *VectorService) ChunkText(text string, chunkSize int, chunkOverlap int) ([]string, error) {
 	if chunkSize <= 0 {
 		return nil, fmt.Errorf("chunkSize must be greater than 0")
 	}
@@ -338,4 +359,21 @@ func (s *VectorService) FindSimilarVectors(queryEmbedding []float32) ([]VectorIt
 	}
 
 	return similarItems, nil
+}
+
+func (s *VectorService) GetSettings() (*Settings, error) {
+	var settings Settings
+	err := s.db.QueryRow("SELECT url, llm, embedding_model FROM settings").Scan(&settings.URL, &settings.LLM, &settings.Embedding)
+	if err != nil {
+		return nil, err
+	}
+	return &settings, nil
+}
+
+func (s *VectorService) UpdateSettings(url string, llm string, embedding string) error {
+	_, err := s.db.Exec("UPDATE settings SET url=?, llm=?, embedding_model=? WHERE id=1", url, llm, embedding)
+	if err != nil {
+		return err
+	}
+	return nil
 }
