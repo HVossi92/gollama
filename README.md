@@ -3,14 +3,17 @@
 A simple chatbot using Go on the backend, HTMX on the frontend and libsql as a vector database as well as Ollama to run the LLMs.
 This was mostly an exercise to learn learn the used technologies.
 
-## Required Ollama models:
+## Required Ollama models or Llamafiles:
+
+Ollama is easier for development and quicker iterations of testing different models. But for deployment llamafiles would be easier.
 
 - "llama3.1:8b-instruct-q8_0" for answering questions. It is a fairly small model, to make sure it can only answer questions by actually using RAG.
 - "nomic-embed-text:latest" for creating embeddings from text. This is a very fast model, specially for creating embeddings from text.
 
 ## Run
 
-- Simply run via `air`
+- Dev: Simply run via `air`
+- Build: `make build`, since everything aside from the libsql file (which will be generated on startup) is statically embedded, it can be run and distributed as a single binary.
 
 ## Add RAG data to vector database
 
@@ -33,3 +36,9 @@ This was mostly an exercise to learn learn the used technologies.
 - Draw a rectangle around an area of interest.
 - Submit annotation
 - The picture will be formatted to base64, and the formatted image together with the rectangle coordinates will be sent to the LLM to be analyzed.
+
+## Todos:
+
+- Add timeouts and validations to check if the LLM models are available.
+- Add loading indicators to the frontend, while waiting for the LLM to respond.
+- Add frontend panel for settings.

@@ -30,3 +30,4 @@ go.work.sum
 rag-data/#01_Database_Summary.txt
 tmp/
 uploads/
+build/
