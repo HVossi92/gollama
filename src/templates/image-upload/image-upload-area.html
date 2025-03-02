@@ -15,9 +15,11 @@
                     Supported formats: JPG, PNG, GIF
                 </div>
             </div>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" hx-indicator="#upload-spinner" hx-disabled-elt="this">
                 <i class="bi bi-cloud-upload me-2"></i>Upload Image
             </button>
+            <span id="upload-spinner" class="spinner-border htmx-indicator spinner-border-sm" role="status"
+                aria-hidden="true"></span>
         </form>
 
         <!-- Image Display Area -->

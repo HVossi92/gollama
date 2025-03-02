@@ -10,18 +10,6 @@
     <link href="/static/bootstrap.min.css" rel="stylesheet">
     <script src="/static/bootstrap.bundle.min.js"></script>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-
-    <style>
-        /* Style for annotation area to ensure it's below chat and has some margin */
-        #image-annotation-area {
-            margin-top: 20px;
-            /* Add space above annotation area */
-            border-top: 1px solid #ddd;
-            /* Separator line */
-            padding-top: 20px;
-            /* Space inside annotation area */
-        }
-    </style>
 </head>
 
 <body>
@@ -53,7 +41,6 @@
     <div class="container py-4 chat-container">
         <!-- Chat Messages Area -->
         <div id="chat-messages" class="chat-messages">
-            <!-- Messages will be inserted here by HTMX -->
             <div class="message ai-message">
                 Hello! I'm Gollama. How can I assist you today?
             </div>
@@ -62,12 +49,15 @@
         <!-- Input Area -->
         <div class="input-area">
             <form hx-post="/chat?use-rag=true" hx-target="#chat-messages" hx-swap="beforeend" hx-trigger="submit"
-                class="d-flex gap-2">
+                hx-indicator="#spinner" hx-disabled-elt="#to-disable">
                 <textarea name="message" class="form-control" rows="3" placeholder="Type your message here..."
                     required></textarea>
-                <button type="submit" class="btn btn-primary send-button align-self-end px-4">
+                <br>
+                <button id="to-disable" type="submit" class="btn btn-primary send-button align-self-end px-4">
                     Send
                 </button>
+                <span id="spinner" class="spinner-border spinner-border-sm htmx-indicator" role="status"
+                    aria-hidden="true"></span>
             </form>
         </div>
 

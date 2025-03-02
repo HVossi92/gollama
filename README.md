@@ -40,5 +40,4 @@ Ollama is easier for development and quicker iterations of testing different mod
 ## Todos:
 
 - Add timeouts and validations to check if the LLM models are available.
-- Add loading indicators to the frontend, while waiting for the LLM to respond.
 - Add frontend panel for settings.

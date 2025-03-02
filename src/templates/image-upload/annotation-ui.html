@@ -9,9 +9,12 @@
                pointer-events: auto;"></canvas>
     </div>
     <button hx-post="/submit-annotations" hx-target="#chat-messages" hx-swap="innerHTML"
-        hx-vals='js:{annotations: getAnnotationData()}' class="btn btn-success btn-sm">
+        hx-vals='js:{annotations: getAnnotationData()}' class="btn btn-success btn-sm" hx-indicator="#submit-spinner"
+        hx-disabled-elt="this">
         Submit Annotations
     </button>
+    <span id="submit-spinner" class="spinner-border htmx-indicator spinner-border-sm" role="status"
+        aria-hidden="true"></span>
     <button hx-get="/cancel-annotation" hx-target="#canvas-area" hx-swap="innerHTML" class="btn btn-secondary btn-sm">
         Cancel
     </button>
